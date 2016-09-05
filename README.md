@@ -371,6 +371,22 @@ func (master *Master) runOperation(remoteWorker *RemoteWorker, operation *Operat
 }
 ```
 
+É importante observar que o código de runOperation é sempre executado em uma goroutine distinta:
+
+```go
+master_scheduler.go
+func (master *Master) schedule(task *Task, proc string, filePathChan chan string) {
+    (...)
+    for filePath = range filePathChan {
+        (...)
+        go master.runOperation(worker, operation, &wg)
+    }
+    (...)
+}
+```
+
+É então necessário desenvolver uma forma de compartilhar a informação de que uma Operation não foi concluída corretamente com a execução do método schedule (o responsável por alocar as operações nos workers). O canal filePathChan vai retornar todos os arquivos criados pelo splitData apenas uma vez. Esse canal é controlado por um método externo e reutilizá-lo pode causar problemas (por exemplo, ele pode ser encerrado pelo código externo, e ao tentar escrever nele, uma chamada de panic será feita como mostra o código a seguir https://play.golang.org/p/KU7MLrFQSx).
+
 Uma solução completamente funcional pode ser obtida em poucas linhas de código (~12 no total), desde que haja um bom entendimento do funcionamento da concorrência em Go (Goroutines, Channels, WaitGroups, Mutexes).
 
 ### Execução Final
