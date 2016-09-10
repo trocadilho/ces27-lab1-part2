@@ -14,6 +14,7 @@ func (master *Master) schedule(task *Task, proc string, filePathChan chan string
 
 	var (
 		wg        sync.WaitGroup
+		wgTask    sync.WaitGroup
 		filePath  string
 		worker    *RemoteWorker
 		operation *Operation
@@ -25,11 +26,16 @@ func (master *Master) schedule(task *Task, proc string, filePathChan chan string
 	counter = 0
 	for filePath = range filePathChan {
 		operation = &Operation{proc, counter, filePath}
+		master.operationCheck[operation] = false
 		counter++
 
-		worker = <-master.idleWorkerChan
-		wg.Add(1)
-		go master.runOperation(worker, operation, &wg)
+		for !master.operationCheck[operation] {
+			worker = <-master.idleWorkerChan
+			wg.Add(1)
+			wgTask.Add(1)
+			go master.runOperation(worker, operation, &wg, &wgTask)
+			wgTask.Wait()
+		}
 	}
 
 	wg.Wait()
@@ -39,7 +45,7 @@ func (master *Master) schedule(task *Task, proc string, filePathChan chan string
 }
 
 // runOperation start a single operation on a RemoteWorker and wait for it to return or fail.
-func (master *Master) runOperation(remoteWorker *RemoteWorker, operation *Operation, wg *sync.WaitGroup) {
+func (master *Master) runOperation(remoteWorker *RemoteWorker, operation *Operation, wg *sync.WaitGroup, wgTask *sync.WaitGroup) {
 	//////////////////////////////////
 	// YOU WANT TO MODIFY THIS CODE //
 	//////////////////////////////////
@@ -61,5 +67,8 @@ func (master *Master) runOperation(remoteWorker *RemoteWorker, operation *Operat
 	} else {
 		wg.Done()
 		master.idleWorkerChan <- remoteWorker
+		master.operationCheck[operation] = true
 	}
+
+	wgTask.Done()
 }
